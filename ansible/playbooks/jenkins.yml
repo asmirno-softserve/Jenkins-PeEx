@@ -1,208 +1,91 @@
-- name: Migrate /var to new LVM-backed volume
+- name: Install and configure Jenkins controller
   hosts: all
-  become: true
-  gather_facts: true
-
+  become: yes
   vars:
-    temp_mount: "/mnt/var_new"
-
-  pre_tasks:
-    - name: Ensure required packages are present
-      ansible.builtin.package:
-        name:
-          - lvm2
-          - rsync
-        state: present
-    
-    - name: Enable persistent storage in journald
-      ansible.builtin.lineinfile:
-        path: /etc/systemd/journald.conf
-        regexp: '^#?Storage='
-        line: 'Storage=persistent'
-      become: true
-
-    - name: Ensure /var/log/journal exists
-      ansible.builtin.file:
-        path: /var/log/journal
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-      become: true
-
-    - name: Restart journald
-      ansible.builtin.systemd:
-        name: systemd-journald
-        state: restarted
-      become: true
-
-    - name: Configure rsyslog for syslog files
-      ansible.builtin.copy:
-        dest: /etc/rsyslog.d/50-default.conf
-        content: |
-          *.*;auth,authpriv.none          -/var/log/syslog
-          auth,authpriv.*                 /var/log/auth.log
-          *.*                             /var/log/messages
-      notify: Restart rsyslog
-      become: true
-
-    - name: Ensure rsyslog is enabled and running
-      ansible.builtin.service:
-        name: rsyslog
-        state: started
-        enabled: true
-      become: true
-
-    - name: Fail early if the specified disk does not exist
-      ansible.builtin.stat:
-        path: "{{ new_disk }}"
-      register: new_disk_stat
-
-    - name: Handle Nitro NVMe device naming (best-effort)
-      ansible.builtin.command: "readlink -f {{ new_disk }}"
-      register: new_disk_real
-      changed_when: false
-      failed_when: false
-      when: not new_disk_stat.stat.exists
-
-    - name: Decide target disk path
-      ansible.builtin.set_fact:
-        target_disk: "{{ (new_disk if new_disk_stat.stat.exists else new_disk_real.stdout) | default(new_disk) }}"
-
-    - name: Sanity check target_disk
-      ansible.builtin.shell: |
-        set -euo pipefail
-        test -b "{{ target_disk }}"
-      args:
-        executable: /bin/bash
-
-    - name: Show disks (debug)
-      ansible.builtin.command: lsblk -o NAME,TYPE,SIZE,MOUNTPOINT
-      register: lsblk_out
-      changed_when: false
-
-    - ansible.builtin.debug:
-        msg: "{{ lsblk_out.stdout_lines }}"
-
-    - name: Skip everything if /var is already a separate mount from our VG/LV
-      ansible.builtin.set_fact:
-        already_migrated: "{{ (ansible_facts.mounts | selectattr('mount', 'equalto', mount_point)
-                                | selectattr('device', 'search', vg_name ~ '-' ~ lv_name)
-                                | list | length) > 0 }}"
+    jenkins_plugins:
+      - workflow-aggregator     
+      - git                     
+      - credentials            
+      - pipeline-stage-view    
+      - configuration-as-code  
+      - job-dsl               
+      - docker-plugin      
 
   tasks:
-    - name: Create volume group (idempotent)
-      community.general.lvg:
-        vg: "{{ vg_name }}"
-        pvs: "{{ target_disk }}"
-      when: not already_migrated
+    # --- Prereqs ---
+    - name: Ensure dependencies are installed
+      apt:
+        name:
+          - curl
+          - gnupg2
+          - ca-certificates
+          - openjdk-17-jdk
+          - git
+          - unzip
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
 
-    - name: Create logical volume (idempotent)
-      community.general.lvol:
-        vg: "{{ vg_name }}"
-        lv: "{{ lv_name }}"
-        size: "{{ lv_size }}"
-        shrink: false
-      when: not already_migrated
-
-    - name: Create filesystem on LV (idempotent)
-      ansible.builtin.filesystem:
-        fstype: "{{ fs_type }}"
-        dev: "/dev/{{ vg_name }}/{{ lv_name }}"
-      when: not already_migrated
-
-    - name: Ensure temp mount exists
-      ansible.builtin.file:
-        path: "{{ temp_mount }}"
-        state: directory
-        mode: "0755"
-      when: not already_migrated
-
-    - name: Mount LV at temp path
-      ansible.builtin.mount:
-        path: "{{ temp_mount }}"
-        src: "/dev/{{ vg_name }}/{{ lv_name }}"
-        fstype: "{{ fs_type }}"
-        state: mounted
-      when: not already_migrated
-
-    - name: Copy current /var to new volume (preserve attrs, ACLs, hardlinks)
-      ansible.builtin.shell: |
-        rsync -aAXH --numeric-ids /var/ {{ temp_mount }}/
+    - name: Add Jenkins apt key
+      shell: curl -fsSL https://pkg.jenkins.io/debian/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
       args:
-        executable: /bin/bash
-      become: true
-      when: not already_migrated
+        creates: /usr/share/keyrings/jenkins-keyring.gpg
 
-    - name: Add /var fstab entry with safe options (nofail)
-      ansible.builtin.mount:
-        path: "{{ mount_point }}"
-        src: "/dev/{{ vg_name }}/{{ lv_name }}"
-        fstype: "{{ fs_type }}"
-        opts: "{{ fstab_opts }}"
-        state: mounted          # writes /etc/fstab and ensures mounted now
-      when: not already_migrated
+    - name: Add Jenkins repo
+      copy:
+        dest: /etc/apt/sources.list.d/jenkins.list
+        content: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian binary/\n"
 
-    - name: Relabel SELinux contexts on /var (RHEL/Alma/Rocky only)
-      ansible.builtin.command: restorecon -RFv /var
-      changed_when: false
-      failed_when: false
-      when:
-        - not already_migrated
-        - ansible_facts.selinux is defined
-        - ansible_facts.selinux.status is defined
-        - ansible_facts.selinux.status == "enabled"
+    # --- Jenkins ---
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+        update_cache: yes
 
-    - name: Verify logging still works (logger test)
-      ansible.builtin.shell: |
-        set -e
-        logger "ansible-var-migration test message"
-        sleep 3
-        if [ -f /var/log/syslog ]; then
-          grep -q "ansible-var-migration test message" /var/log/syslog
-        elif [ -f /var/log/messages ]; then
-          grep -q "ansible-var-migration test message" /var/log/messages
-        else
-          journalctl -n 50 | grep -q "ansible-var-migration test message"
-        fi
-      args:
-        executable: /bin/bash
-      register: logcheck
-      ignore_errors: false
+    - name: Start and enable Jenkins
+      systemd:
+        name: jenkins
+        enabled: yes
+        state: started
 
-    - name: Optional reboot to confirm fstab persistence
-      ansible.builtin.reboot:
-        msg: "Rebooting to verify /var mount from fstab"
-        reboot_timeout: 600
-      when: reboot_after | bool
+    # --- Jenkins Plugins ---
+    - name: Install Jenkins plugins
+      shell: |
+        /usr/bin/jenkins-plugin-cli --plugins {{ jenkins_plugins | join(' ') }}
+      environment:
+        JENKINS_HOME: /var/lib/jenkins
 
-    - name: Re-verify /var mount after reboot (if rebooted)
-      ansible.builtin.shell: mount | grep -E "^/dev/mapper/{{ vg_name }}-{{ lv_name }} on {{ mount_point }} "
-      args:
-        executable: /bin/bash
-      changed_when: false
-      when: reboot_after | bool
+    # --- Admin User ---
+    - name: Create admin user via init.groovy.d
+      copy:
+        dest: /var/lib/jenkins/init.groovy.d/basic-security.groovy
+        content: |
+          #!groovy
+          import jenkins.model.*
+          import hudson.security.*
+          def instance = Jenkins.getInstance()
+          def hudsonRealm = new HudsonPrivateSecurityRealm(false)
+          hudsonRealm.createAccount("{{ jenkins_admin_user }}", "{{ jenkins_admin_password }}")
+          instance.setSecurityRealm(hudsonRealm)
+          def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
+          strategy.setAllowAnonymousRead(false)
+          instance.setAuthorizationStrategy(strategy)
+          instance.save()
 
-  post_tasks:
-    - name: Final state summary
-      ansible.builtin.shell: |
-        echo "==== mount ===="
-        mount | grep " on {{ mount_point }} "
-        echo "==== df -h ===="
-        df -h "{{ mount_point }}"
-        echo "==== lvs ===="
-        lvs -o+devices
-      args:
-        executable: /bin/bash
-      register: summary
-      changed_when: false
+      notify:
+        - Restart Jenkins
 
-    - ansible.builtin.debug:
-        msg: "{{ summary.stdout_lines }}"
+    # --- Docker access ---
+    - name: Add Jenkins user to Docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: yes
 
   handlers:
-  - name: Restart rsyslog
-    ansible.builtin.service:
-      name: rsyslog
-      state: restarted
-    become: true
+    - name: Restart Jenkins
+      systemd:
+        name: jenkins
+        state: restarted

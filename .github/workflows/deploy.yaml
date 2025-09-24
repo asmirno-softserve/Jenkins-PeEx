@@ -1,0 +1,65 @@
+name: Provision Jenkins and Deploy App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: Provision infrastructure with Terraform
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Terraform Init
+        run: terraform -chdir=terraform init -input=false
+
+      - name: Terraform Apply
+        run: terraform -chdir=terraform apply -auto-approve
+
+      - name: Export Terraform outputs
+        id: tfout
+        run: |
+          echo "JENKINS_IP=$(terraform -chdir=terraform output -raw jenkins_public_ip)" >> $GITHUB_ENV
+          terraform -chdir=terraform output -raw ansible_inventory_yaml > ansible/inventory.yaml
+
+  ansible:
+    name: Configure Jenkins with Ansible
+    runs-on: ubuntu-latest
+    needs: infra
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i ansible/inventory.yaml ansible/jenkins.yml \
+            -e "jenkins_admin_user=${{ secrets.JENKINS_ADMIN_USER }}" \
+            -e "jenkins_admin_password=${{ secrets.JENKINS_ADMIN_PASSWORD }}"
+
+  jenkins:
+    name: Trigger Jenkins Job
+    runs-on: ubuntu-latest
+    needs: config
+    steps:
+      - name: Trigger Jenkins via API
+        run: |
+          curl -u "${{ secrets.JENKINS_ADMIN_USER }}:${{ secrets.JENKINS_ADMIN_PASSWORD }}" \
+            -X POST "http://${{ env.JENKINS_IP }}:8080/job/my-pipeline/build?token=${{ secrets.JENKINS_TRIGGER_TOKEN }}"
