@@ -31,6 +31,20 @@ jobs:
         run: |
           echo "JENKINS_IP=$(terraform -chdir=terraform output -raw jenkins_public_ip)" >> $GITHUB_ENV
           terraform -chdir=terraform output -raw ansible_inventory_yaml > ansible/inventory.yaml
+      - name: Wait for EC2 to be ready
+        run: |
+          ip=$(terraform -chdir=terraform output -raw jenkins_public_ip)
+          echo "Checking SSH availability on $ip..."
+          for i in {1..20}; do
+            if ssh -o StrictHostKeyChecking=no -i ~/Downloads/PeEx.pem ubuntu@$ip 'echo ready'; then
+              echo "EC2 is ready!"
+              exit 0
+            fi
+            echo "Waiting for EC2 SSH... attempt $i"
+            sleep 15
+          done
+          echo "EC2 did not become ready in time" >&2
+          exit 1
 
   ansible:
     name: Configure Jenkins with Ansible
