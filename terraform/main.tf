@@ -20,15 +20,25 @@ data "aws_ami" "ubuntu" {
 resource "aws_instance" "jenkins" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t2.micro"
+  subnet_id                   = aws_subnet.jenkins_subnet.id
+  vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
+  key_name                    = PeEx
+  associate_public_ip_address = true
+
+  user_data = <<-EOF
+    #!/bin/bash
+    apt-get update -y
+    apt-get install -y python3 python3-apt
+  EOF
 
   tags = {
-    Name = "jenkins-target"
+    Name = "jenkins-server"
   }
 }
 
-resource "aws_security_group" "allow_ssh_http" {
-  name        = "allow_ssh_http"
-  description = "Allow SSH and HTTP"
+resource "aws_security_group" "jenkins_sg" {
+  name   = "jenkins-sg"
+  vpc_id = aws_vpc.jenkins_vpc.id
 
   ingress {
     from_port   = 22
@@ -63,6 +73,7 @@ resource "aws_vpc" "jenkins_vpc" {
 resource "aws_subnet" "jenkins_subnet" {
   vpc_id                  = aws_vpc.jenkins_vpc.id
   cidr_block              = "10.0.1.0/24"
+  availability_zone       = ${var.aws_region}a"
   map_public_ip_on_launch = true
 
   tags = { Name = "jenkins-subnet" }
@@ -84,7 +95,6 @@ resource "aws_route_table_association" "jenkins_rta" {
   subnet_id      = aws_subnet.jenkins_subnet.id
   route_table_id = aws_route_table.jenkins_rt.id
 }
-
 
 output "public_ip" {
   value = aws_instance.jenkins.public_ip
