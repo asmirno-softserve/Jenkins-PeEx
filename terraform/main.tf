@@ -106,6 +106,6 @@ all:
   hosts:
     ${aws_instance.jenkins.public_ip}:
       ansible_user: ubuntu
-      ansible_ssh_private_key_file: ${local_file.private_key.filename}
+      ansible_ssh_private_key_file: ~/Downloads/PeEx.pem
 EOT
 }
