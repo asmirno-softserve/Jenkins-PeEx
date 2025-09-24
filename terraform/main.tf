@@ -96,17 +96,16 @@ resource "aws_route_table_association" "jenkins_rta" {
   route_table_id = aws_route_table.jenkins_rt.id
 }
 
-output "public_ip" {
-  value = aws_instance.jenkins.public_ip
+output "jenkins_public_ip" {
+  value       = aws_instance.jenkins.public_ip
 }
 
-resource "local_file" "ansible_inventory" {
-  filename = "${path.module}/../ansible/inventory.yaml"
-  content  = <<EOT
+output "ansible_inventory_yaml" {
+  value = <<EOT
 all:
   hosts:
     ${aws_instance.jenkins.public_ip}:
       ansible_user: ubuntu
-      ansible_ssh_private_key_file: ~/Downloads/PeEx.pem
+      ansible_ssh_private_key_file: ${local_file.private_key.filename}
 EOT
 }
