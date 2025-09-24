@@ -34,9 +34,10 @@ jobs:
       - name: Wait for EC2 to be ready
         run: |
           ip=$(terraform -chdir=terraform output -raw jenkins_public_ip)
-          echo "Checking SSH availability on $ip..."
+          key=terraform/jenkins-key.pem
+          echo "Checking SSH availability on $ip with key $key ..."
           for i in {1..20}; do
-            if ssh -o StrictHostKeyChecking=no -i ~/Downloads/PeEx.pem ubuntu@$ip 'echo ready'; then
+            if ssh -o StrictHostKeyChecking=no -i $key ubuntu@$ip 'echo ready'; then
               echo "EC2 is ready!"
               exit 0
             fi
