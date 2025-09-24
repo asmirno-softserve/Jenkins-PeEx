@@ -22,7 +22,7 @@ resource "aws_instance" "jenkins" {
   instance_type = "t2.micro"
   subnet_id                   = aws_subnet.jenkins_subnet.id
   vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
-  key_name                    = PeEx
+  key_name                    = "PeEx"
   associate_public_ip_address = true
 
   user_data = <<-EOF
@@ -73,7 +73,7 @@ resource "aws_vpc" "jenkins_vpc" {
 resource "aws_subnet" "jenkins_subnet" {
   vpc_id                  = aws_vpc.jenkins_vpc.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
+  availability_zone       = "eu-central-1a"
   map_public_ip_on_launch = true
 
   tags = { Name = "jenkins-subnet" }
