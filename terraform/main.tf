@@ -2,7 +2,7 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-resource "aws_instance" "jenkins_target" {
+resource "aws_instance" "jenkins" {
   ami           = "ami-0c55b159cbfafe1f0"
   instance_type = "t2.micro"
 
@@ -38,7 +38,7 @@ resource "aws_security_group" "allow_ssh_http" {
 }
 
 output "public_ip" {
-  value = aws_instance.jenkins_target.public_ip
+  value = aws_instance.jenkins.public_ip
 }
 
 resource "local_file" "ansible_inventory" {
