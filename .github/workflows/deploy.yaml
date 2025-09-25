@@ -67,6 +67,11 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
+      - name: Restore SSH private key
+        run: |
+          echo "${{ secrets.JENKINS_KEY }}" > ansible/jenkins-key.pem
+          chmod 600 ansible/jenkins-key.pem
+
       - name: Run Ansible Playbook
         run: |
           ansible-playbook -i ansible/inventory.yml ansible/playbooks/jenkins.yml \
