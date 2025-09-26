@@ -70,6 +70,11 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
+      - name: Restore SSH private key
+        run: |
+          echo "${{ secrets.JENKINS_KEY }}" | base64 -d > ansible/jenkins-key.pem
+          chmod 600 ansible/jenkins-key.pem
+
       - name: Generate inventory file
         run: |
           cat > ansible/inventory.yml <<EOT
