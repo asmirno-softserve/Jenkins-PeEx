@@ -3,13 +3,14 @@
   become: yes
   vars:
     jenkins_plugins:
-      - workflow-aggregator     
-      - git                     
-      - credentials            
-      - pipeline-stage-view    
-      - configuration-as-code  
-      - job-dsl               
-      - docker-plugin      
+      - workflow-aggregator
+      - git
+      - credentials
+      - pipeline-stage-view
+      - configuration-as-code
+      - job-dsl
+      - docker-plugin
+      - docker-workflow 
 
   tasks:
     # --- Prereqs ---
@@ -50,18 +51,19 @@
         enabled: yes
         state: started
     
-    - name: Ensure jenkins-plugin-cli is available
+    - name: Download Jenkins Plugin Manager if missing
       get_url:
-        url: https://raw.githubusercontent.com/jenkinsci/plugin-installation-manager-tool/master/bin/jenkins-plugin-cli
-        dest: /usr/local/bin/jenkins-plugin-cli
+        url: https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+        dest: /usr/local/bin/jenkins-plugin-manager.jar
         mode: '0755'
+      become: yes
 
-    # --- Jenkins Plugins ---
-    - name: Install Jenkins plugins
+    - name: Install Jenkins plugins with plugin manager
       shell: |
-        /usr/bin/jenkins-plugin-cli --plugins {{ jenkins_plugins | join(' ') }}
+        java -jar /usr/local/bin/jenkins-plugin-manager.jar --plugins {{ jenkins_plugins | join(' ') }}
       environment:
         JENKINS_HOME: /var/lib/jenkins
+      become: yes
 
     # --- Admin User ---
     - name: Create admin user via init.groovy.d
