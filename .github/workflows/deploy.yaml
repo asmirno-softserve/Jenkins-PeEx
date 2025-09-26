@@ -78,6 +78,7 @@ jobs:
               ${{ needs.terraform.outputs.jenkins_ip }}:
                 ansible_user: ubuntu
                 ansible_ssh_private_key_file: ansible/jenkins-key.pem
+                ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o ConnectTimeout=5'
           EOT
 
       - name: Run Ansible Playbook
