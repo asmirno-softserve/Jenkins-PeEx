@@ -49,6 +49,12 @@
         name: jenkins
         enabled: yes
         state: started
+    
+    - name: Ensure jenkins-plugin-cli is available
+      get_url:
+        url: https://raw.githubusercontent.com/jenkinsci/plugin-installation-manager-tool/master/bin/jenkins-plugin-cli
+        dest: /usr/local/bin/jenkins-plugin-cli
+        mode: '0755'
 
     # --- Jenkins Plugins ---
     - name: Install Jenkins plugins
