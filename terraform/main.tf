@@ -141,7 +141,7 @@ resource "aws_iam_role_policy_attachment" "jenkins_ecr_policy" {
 }
 
 # Instance profile for EC2 to use the role
-resource "aws_iam_instance_profile" "jenkins_profile" {
+resource "aws_iam_instance_profile" "jenkins_inst_profile" {
   name = "jenkins-ec2-profile"
   role = aws_iam_role.jenkins_role.name
 }
