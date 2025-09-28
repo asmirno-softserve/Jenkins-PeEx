@@ -29,6 +29,8 @@ resource "aws_instance" "jenkins" {
   key_name                    = data.aws_key_pair.jenkins-key.key_name
   associate_public_ip_address = true
 
+  iam_instance_profile = aws_iam_instance_profile.jenkins_profile.name
+
   user_data = <<-EOF
     #!/bin/bash
     apt-get update -y
@@ -105,6 +107,34 @@ resource "aws_route_table" "jenkins_rt" {
 resource "aws_route_table_association" "jenkins_rta" {
   subnet_id      = aws_subnet.jenkins_subnet.id
   route_table_id = aws_route_table.jenkins_rt.id
+}
+
+# IAM Role for Jenkins EC2
+resource "aws_iam_role" "jenkins_role" {
+  name = "jenkins-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Attach policy for ECR access (pull & push images)
+resource "aws_iam_role_policy_attachment" "jenkins_ecr_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# Instance profile for EC2 to use the role
+resource "aws_iam_instance_profile" "jenkins_profile" {
+  name = "jenkins-ec2-profile"
+  role = aws_iam_role.jenkins_role.name
 }
 
 output "jenkins_public_ip" {
