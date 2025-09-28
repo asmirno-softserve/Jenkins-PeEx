@@ -65,6 +65,14 @@
         JENKINS_HOME: /var/lib/jenkins
       become: yes
 
+    - name: Ensure Jenkins init.groovy.d directory exists
+      file:
+        path: /var/lib/jenkins/init.groovy.d
+        state: directory
+        owner: jenkins
+        group: jenkins
+        mode: '0755'
+
     # --- Admin User ---
     - name: Create admin user via init.groovy.d
       copy:
