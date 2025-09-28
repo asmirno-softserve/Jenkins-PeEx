@@ -94,7 +94,9 @@ jobs:
 
   jenkins:
     runs-on: ubuntu-latest
-    needs: terraform
+    needs: 
+      - terraform
+      - ansible
     steps:
       - name: Trigger Jenkins via API
         run: |
