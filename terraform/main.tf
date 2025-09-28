@@ -38,7 +38,7 @@ resource "aws_instance" "jenkins" {
   key_name                    = data.aws_key_pair.jenkins-key.key_name
   associate_public_ip_address = true
 
-  iam_instance_profile = aws_iam_instance_profile.jenkins_profile.name
+  iam_instance_profile = aws_iam_instance_profile.jenkins_inst_profile.name
 
   user_data = <<-EOF
     #!/bin/bash
