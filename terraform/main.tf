@@ -23,7 +23,7 @@ data "aws_key_pair" "jenkins-key" {
 
 resource "aws_instance" "jenkins" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
+  instance_type = "t3.large"
   subnet_id                   = aws_subnet.jenkins_subnet.id
   vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
   key_name                    = data.aws_key_pair.jenkins-key.key_name
@@ -135,6 +135,19 @@ resource "aws_iam_role_policy_attachment" "jenkins_ecr_policy" {
 resource "aws_iam_instance_profile" "jenkins_profile" {
   name = "jenkins-ec2-profile"
   role = aws_iam_role.jenkins_role.name
+}
+
+
+# Allow full access to S3 (you can narrow this down to specific buckets if needed)
+resource "aws_iam_role_policy_attachment" "jenkins_s3_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+# Allow read access to Secrets Manager
+resource "aws_iam_role_policy_attachment" "jenkins_secrets_manager_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
 
 output "jenkins_public_ip" {
