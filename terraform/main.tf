@@ -2,6 +2,15 @@ provider "aws" {
   region = "eu-central-1"
 }
 
+terraform {
+  backend "s3" {
+    bucket         = "peex-jenkins"   # must exist already
+    key            = "jenkins/terraform.tfstate"   # path inside the bucket
+    region         = "eu-central-1"
+    encrypt        = true
+  }
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
