@@ -10,7 +10,7 @@ pipeline {
         stage('Run App') {
             steps {
                 sh 'docker rm -f my-simple-app || true'
-                sh 'docker run -d --name my-simple-app -p 8080:8080 my-simple-app:latest'
+                sh 'docker run -d --name my-simple-app -p 8090:8090 my-simple-app:latest'
             }
         }
     }
