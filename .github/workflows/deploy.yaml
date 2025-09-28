@@ -2,6 +2,15 @@ name: Provision Jenkins and Deploy App
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action (apply or destroy)"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy  
 
 jobs:
   terraform:
@@ -25,20 +34,28 @@ jobs:
       - name: Terraform Init
         run: terraform -chdir=terraform init -input=false
 
-      - name: Terraform Apply
-        run: terraform -chdir=terraform apply -auto-approve
+      - name: Terraform Apply or Destroy
+        run: |
+          if [ "${{ github.event.inputs.action }}" = "apply" ]; then
+            terraform -chdir=terraform apply -auto-approve
+          else
+            terraform -chdir=terraform destroy -auto-approve
+          fi        
 
       - name: Export Terraform outputs
+        if: ${{ github.event.inputs.action == 'apply' }}
         id: tfout
         run: |
           echo "jenkins_ip=$(terraform -chdir=terraform output -raw jenkins_public_ip)" >> $GITHUB_OUTPUT
 
       - name: Restore SSH private key
+        if: ${{ github.event.inputs.action == 'apply' }}
         run: |
           echo "${{ secrets.JENKINS_KEY }}" | base64 -d > ansible/jenkins-key.pem
           chmod 600 ansible/jenkins-key.pem
 
       - name: Wait for EC2 to be ready
+        if: ${{ github.event.inputs.action == 'apply' }}
         run: |
           ip=$(terraform -chdir=terraform output -raw jenkins_public_ip)
           key=ansible/jenkins-key.pem
@@ -57,6 +74,7 @@ jobs:
   ansible:
     name: Configure Jenkins with Ansible
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'apply' }}
     needs: terraform
     steps:
       - name: Checkout repo
@@ -94,6 +112,7 @@ jobs:
 
   jenkins:
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'apply' }}    
     needs: 
       - terraform
       - ansible
