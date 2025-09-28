@@ -25,6 +25,7 @@
           - unzip
           - docker.io
           - docker-compose
+          - awscli
         state: present
         update_cache: yes
 
