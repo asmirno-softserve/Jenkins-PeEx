@@ -170,7 +170,8 @@ jobs:
           distribution: 'temurin'
 
       - name: Build with Maven
-        run: mvn -B clean install       
+        run: mvn -B clean install
+        working-directory: java     
       
   sonarcloud:
     name: SonarCloud Code Analysis
