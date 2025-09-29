@@ -2,6 +2,15 @@ provider "aws" {
   region = "eu-central-1"
 }
 
+terraform {
+  backend "s3" {
+    bucket         = "peex-jenkins"   # must exist already
+    key            = "jenkins/terraform.tfstate"   # path inside the bucket
+    region         = "eu-central-1"
+    encrypt        = true
+  }
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
@@ -23,11 +32,13 @@ data "aws_key_pair" "jenkins-key" {
 
 resource "aws_instance" "jenkins" {
   ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
+  instance_type = "t3.large"
   subnet_id                   = aws_subnet.jenkins_subnet.id
   vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
   key_name                    = data.aws_key_pair.jenkins-key.key_name
   associate_public_ip_address = true
+
+  iam_instance_profile = aws_iam_instance_profile.jenkins_inst_profile.name
 
   user_data = <<-EOF
     #!/bin/bash
@@ -105,6 +116,47 @@ resource "aws_route_table" "jenkins_rt" {
 resource "aws_route_table_association" "jenkins_rta" {
   subnet_id      = aws_subnet.jenkins_subnet.id
   route_table_id = aws_route_table.jenkins_rt.id
+}
+
+# IAM Role for Jenkins EC2
+resource "aws_iam_role" "jenkins_role" {
+  name = "jenkins-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Attach policy for ECR access (pull & push images)
+resource "aws_iam_role_policy_attachment" "jenkins_ecr_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# Instance profile for EC2 to use the role
+resource "aws_iam_instance_profile" "jenkins_inst_profile" {
+  name = "jenkins-ec2-inst-profile"
+  role = aws_iam_role.jenkins_role.name
+}
+
+
+# Allow full access to S3 (you can narrow this down to specific buckets if needed)
+resource "aws_iam_role_policy_attachment" "jenkins_s3_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+# Allow read access to Secrets Manager
+resource "aws_iam_role_policy_attachment" "jenkins_secrets_manager_policy" {
+  role       = aws_iam_role.jenkins_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
 
 output "jenkins_public_ip" {

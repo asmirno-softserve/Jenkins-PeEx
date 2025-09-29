@@ -25,6 +25,7 @@
           - unzip
           - docker.io
           - docker-compose
+          - awscli
         state: present
         update_cache: yes
 
@@ -45,11 +46,19 @@
         state: present
         update_cache: yes
 
-    - name: Start and enable Jenkins
-      systemd:
-        name: jenkins
-        enabled: yes
-        state: started
+    - name: Install Jenkins plugins with plugin manager
+      shell: |
+        aws s3 cp  s3://peex-jenkins/jenkins_job.tar.gz /var/lib/jenkins_job.tar.gz
+        cd /var/lib/jenkins && rm -rf *
+        tar xvzf /var/lib/jenkins_job.tar.gz -C /var/lib/jenkins/jobs
+
+    - name: Deploy Jenkins unit file
+      template:
+        src: jenkins.service.j2
+        dest: /lib/systemd/system/jenkins
+        owner: root
+        group: root
+        mode: '0644'        
     
     - name: Download Jenkins Plugin Manager if missing
       get_url:
@@ -57,6 +66,12 @@
         dest: /usr/local/bin/jenkins-plugin-manager.jar
         mode: '0755'
       become: yes
+
+    - name: Start and enable Jenkins
+      systemd:
+        name: jenkins
+        enabled: yes
+        state: started      
 
     - name: Install Jenkins plugins with plugin manager
       shell: |
@@ -89,9 +104,8 @@
           strategy.setAllowAnonymousRead(false)
           instance.setAuthorizationStrategy(strategy)
           instance.save()
-
       notify:
-        - Restart Jenkins
+        - Restart Jenkins      
 
     # --- Docker access ---
     - name: Add Jenkins user to Docker group
