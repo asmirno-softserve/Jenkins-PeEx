@@ -46,10 +46,9 @@
         state: present
         update_cache: yes
 
-    - name: Install Jenkins plugins with plugin manager
+    - name: Create Jenkins job
       shell: |
         aws s3 cp  s3://peex-jenkins/jenkins_job.tar.gz /var/lib/jenkins_job.tar.gz
-        cd /var/lib/jenkins && rm -rf *
         tar xvzf /var/lib/jenkins_job.tar.gz -C /var/lib/jenkins/jobs
 
     - name: Deploy Jenkins unit file
