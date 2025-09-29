@@ -78,6 +78,12 @@ jobs:
     if: ${{ github.event.inputs.action == 'apply' }}
     needs: terraform
     steps:
+      - name: Skip on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Skipping Ansible on PR..."
+          exit 0
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
@@ -118,6 +124,12 @@ jobs:
       - terraform
       - ansible
     steps:
+      - name: Skip on PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Skipping Jenkins on PR..."
+          exit 0
+          
       - name: Trigger Jenkins via API
         run: |
           curl -u "${{ secrets.JENKINS_ADMIN_USER }}:${{ secrets.JENKINS_ADMIN_PASSWORD }}" \
