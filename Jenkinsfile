@@ -2,8 +2,7 @@ pipeline {
     agent any
     environment {
         VERSION_FILE = "VERSION"
-        AWS_REGION   = "eu-central-1"   // change to your region
-        AWS_ACCOUNT  = "123456789012"   // change to your AWS account ID
+        AWS_REGION   = "eu-central-1"
         ECR_REPO     = "my-simple-app"
     }
     stages {
