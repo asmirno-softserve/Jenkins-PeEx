@@ -171,8 +171,14 @@ jobs:
 
       - name: Build with Maven
         run: mvn -B clean install
-        working-directory: java     
+        working-directory: java    
       
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-classes
+          path: java/target/classes
+
   sonarcloud:
     name: SonarCloud Code Analysis
     runs-on: ubuntu-latest
@@ -182,12 +188,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: java-classes
+          path: java/target/classes
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
             -Dsonar.organization=asmirno-softserve
             -Dsonar.projectKey=asmirno-softserve_Jenkins-PeEx
+            -Dsonar.java.binaries=java/target/classes
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
   # test sonarcloud
