@@ -172,3 +172,4 @@ jobs:
             -Dsonar.projectKey=asmirno-softserve_Jenkins-PeEx
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  # test sonarcloud
