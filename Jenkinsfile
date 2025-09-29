@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        VERSION_FILE = "VERSION"
+        VERSION_FILE = "VERSION.txt"
         AWS_REGION   = "eu-central-1"
         ECR_REPO     = "my-simple-app"
     }
