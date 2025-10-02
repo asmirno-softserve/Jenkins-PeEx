@@ -70,12 +70,14 @@ jobs:
 
       - name: Generate version
         id: version
-        if: github.ref == 'refs/heads/main'
         run: |
           OUTPUT=$(npx semantic-release --dry-run || true)
           echo "$OUTPUT"
-          VERSION=$(echo "$OUTPUT" | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT 
+          VERSION=$(echo "$OUTPUT" | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+' || true)
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_SHA::7}"   # fallback: use short commit SHA
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         run: |
