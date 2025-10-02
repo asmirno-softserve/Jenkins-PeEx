@@ -132,7 +132,7 @@ jobs:
 
       - name: Deploy to staging
         run: |
-          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }} -n staging
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} -n staging
           kubectl rollout status deployment/peex-app -n staging
           
       
@@ -171,8 +171,8 @@ jobs:
 
       - name: Tag stable image
         run: |
-          docker pull $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
-          docker tag $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }} \
+          docker pull $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }}
+          docker tag $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} \
             $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:stable
           docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:stable
         env:
@@ -207,7 +207,7 @@ jobs:
 
       - name: Deploy to prod
         run: |
-          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }} -n production
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} -n production
           kubectl rollout status deployment/peex-app -n production
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
