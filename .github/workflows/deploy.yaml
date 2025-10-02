@@ -155,20 +155,27 @@ jobs:
             Regards,
             CI/CD Bot
       
-  sonarcloud:
-    name: SonarCloud Code Analysis
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+ # sonarcloud:
+ #   name: SonarCloud Code Analysis
+ #   runs-on: ubuntu-latest
+ #   if: github.event_name == 'pull_request'
+ #   needs: build
+ #   steps:
+ #     - uses: actions/checkout@v4
+ #       with:
+ #         fetch-depth: 0
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        with:
-          args: >
-            -Dsonar.organization=asmirno-softserve
-            -Dsonar.projectKey=asmirno-softserve_Jenkins-PeEx
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+ #     - uses: actions/download-artifact@v4
+ #       with:
+ #         name: java-classes
+ #         path: java/target/classes
+
+ #     - name: SonarCloud Scan
+ #       uses: SonarSource/sonarcloud-github-action@v2
+ #       with:
+ #         args: >
+ #           -Dsonar.organization=asmirno-softserve
+ #           -Dsonar.projectKey=asmirno-softserve_Jenkins-PeEx
+ #           -Dsonar.java.binaries=java/target/classes
+ #       env:
+ #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
