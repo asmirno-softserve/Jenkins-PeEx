@@ -1,0 +1,27 @@
+{
+  "name": "jenkins-peex",
+  "version": "1.0.0",
+  "description": "In this project, we walk through the process of building a Docker image and deploying the image to Amazon ECR, share some security best practices, and demonstrate deploying a Docker image to Amazon Elastic Container Service (Amazon ECS). Additionally, we dive deep into building Docker images following modern principles. The project we create in this post addresses a use case in which an organization needs an automated workflow for building, distributing, and deploying Docker images. With Image Builder, we build and deploy Docker images and test our image locally that we have created with our Image Builder pipeline.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmirno-softserve/Jenkins-PeEx.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/asmirno-softserve/Jenkins-PeEx/issues"
+  },
+  "homepage": "https://github.com/asmirno-softserve/Jenkins-PeEx#readme",
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "semantic-release": "^24.2.9"
+  }
+}

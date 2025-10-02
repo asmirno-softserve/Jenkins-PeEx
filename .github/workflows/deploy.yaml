@@ -16,7 +16,7 @@ on:
           - destroy
   pull_request:
     branches:
-      - main 
+      - main
 
 jobs:
   terraform:
@@ -46,15 +46,42 @@ jobs:
             terraform -chdir=terraform destroy -auto-approve
           fi        
 
-  build-and-push:
-    name: Build & Push Docker Image to ECR
+  build:
+    name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [terraform]
+    needs: terraform
     if: github.event.inputs.action == 'apply'
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Set up Node.js for semantic-release
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install semantic-release
+        run: |
+          npm init -y
+          npm install --save-dev semantic-release @semantic-release/git @semantic-release/github @semantic-release/changelog
+
+      - name: Generate version
+        id: version
+        run: |
+          npx semantic-release --dry-run
+          VERSION=$(npx semantic-release --dry-run | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build -t peex-app:${{ steps.version.outputs.version }} ./java
+
+  push:
+    name: Push Docker Image to ECR
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.action == 'apply'
+    steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -63,21 +90,13 @@ jobs:
           aws-region: eu-central-1
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image
+      - name: Tag & Push Docker image
         run: |
-          docker build -t peex-app:latest ./java
-
-      - name: Tag Docker image
-        run: |
-          docker tag peex-app:latest \
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }}
-
-      - name: Push Docker image to ECR
-        run: |
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }}
+          docker tag peex-app:${{ needs.build.outputs.version }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
 
   deploy-staging:
     name: Deploy to EKS (staging)
