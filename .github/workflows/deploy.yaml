@@ -134,7 +134,8 @@ jobs:
         run: |
           kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} -n staging
           kubectl rollout status deployment/peex-app -n staging
-          
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}          
       
       - name: Get staging LB URL
         id: get-url
