@@ -68,7 +68,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t peex-app:latest .
+          docker build -t peex-app:latest ./java
 
       - name: Tag Docker image
         run: |
