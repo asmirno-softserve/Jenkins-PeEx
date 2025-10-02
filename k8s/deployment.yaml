@@ -17,4 +17,4 @@ spec:
       - name: peex-app
         image: 038462773293.dkr.ecr.eu-central-1.amazonaws.com/peex-app:1.0.0
         ports:
-        - containerPort: 8080
+        - containerPort: 8090
