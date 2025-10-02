@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peex-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: peex-app
+  template:
+    metadata:
+      labels:
+        app: peex-app
+    spec:
+      serviceAccountName: peex-app-sa
+      automountServiceAccountToken: false
+      containers:
+      - name: peex-app
+        image: 038462773293.dkr.ecr.eu-central-1.amazonaws.com/peex-app:1.0.0
+        ports:
+        - containerPort: 8090
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi" 
+            ephemeral-storage: "1Gi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+            ephemeral-storage: "2Gi"

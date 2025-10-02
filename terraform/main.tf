@@ -4,86 +4,14 @@ provider "aws" {
 
 terraform {
   backend "s3" {
-    bucket         = "peex-jenkins"   # must exist already
-    key            = "jenkins/terraform.tfstate"   # path inside the bucket
+    bucket         = "peex-jenkins" 
+    key            = "jenkins/terraform.tfstate"
     region         = "eu-central-1"
     encrypt        = true
   }
 }
 
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"]
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
-data "aws_key_pair" "jenkins-key" {
-  key_name = "ec2-jenkins-key"
-}
-
-resource "aws_instance" "jenkins" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.large"
-  subnet_id                   = aws_subnet.jenkins_subnet.id
-  vpc_security_group_ids      = [aws_security_group.jenkins_sg.id]
-  key_name                    = data.aws_key_pair.jenkins-key.key_name
-  associate_public_ip_address = true
-
-  iam_instance_profile = aws_iam_instance_profile.jenkins_inst_profile.name
-
-  user_data = <<-EOF
-    #!/bin/bash
-    apt-get update -y
-    apt-get install -y python3 python3-apt
-  EOF
-
-  tags = {
-    Name = "jenkins-server"
-  }
-}
-
-resource "aws_security_group" "jenkins_sg" {
-  name   = "jenkins-sg"
-  vpc_id = aws_vpc.jenkins_vpc.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
+# Network
 resource "aws_vpc" "jenkins_vpc" {
   cidr_block = "10.0.0.0/16"
   enable_dns_support   = true
@@ -92,10 +20,19 @@ resource "aws_vpc" "jenkins_vpc" {
   tags = { Name = "jenkins-vpc" }
 }
 
-resource "aws_subnet" "jenkins_subnet" {
+resource "aws_subnet" "jenkins_subnet_a" {
   vpc_id                  = aws_vpc.jenkins_vpc.id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "eu-central-1a"
+  map_public_ip_on_launch = true
+
+  tags = { Name = "jenkins-subnet" }
+}
+
+resource "aws_subnet" "jenkins_subnet_b" {
+  vpc_id                  = aws_vpc.jenkins_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "eu-central-1b"
   map_public_ip_on_launch = true
 
   tags = { Name = "jenkins-subnet" }
@@ -113,62 +50,125 @@ resource "aws_route_table" "jenkins_rt" {
   }
 }
 
-resource "aws_route_table_association" "jenkins_rta" {
-  subnet_id      = aws_subnet.jenkins_subnet.id
+resource "aws_route_table_association" "jenkins_rta_a" {
+  subnet_id      = aws_subnet.jenkins_subnet_a.id
   route_table_id = aws_route_table.jenkins_rt.id
 }
 
-# IAM Role for Jenkins EC2
-resource "aws_iam_role" "jenkins_role" {
-  name = "jenkins-ec2-role"
+resource "aws_route_table_association" "jenkins_rta_b" {
+  subnet_id      = aws_subnet.jenkins_subnet_b.id
+  route_table_id = aws_route_table.jenkins_rt.id
+}
+
+# IAM role for EKS cluster
+resource "aws_iam_role" "eks_cluster" {
+  name = "peex-eks-cluster-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
       Effect = "Allow",
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      },
+      Principal = { Service = "eks.amazonaws.com" },
       Action = "sts:AssumeRole"
     }]
   })
 }
 
-# Attach policy for ECR access (pull & push images)
-resource "aws_iam_role_policy_attachment" "jenkins_ecr_policy" {
-  role       = aws_iam_role.jenkins_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSClusterPolicy" {
+  role       = aws_iam_role.eks_cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
-# Instance profile for EC2 to use the role
-resource "aws_iam_instance_profile" "jenkins_inst_profile" {
-  name = "jenkins-ec2-inst-profile"
-  role = aws_iam_role.jenkins_role.name
+resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSVPCResourceController" {
+  role       = aws_iam_role.eks_cluster.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
+# EKS cluster
+resource "aws_eks_cluster" "peex" {
+  name     = "peex-eks"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = "1.29"
 
-# Allow full access to S3 (you can narrow this down to specific buckets if needed)
-resource "aws_iam_role_policy_attachment" "jenkins_s3_policy" {
-  role       = aws_iam_role.jenkins_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  vpc_config {
+    subnet_ids = [aws_subnet.jenkins_subnet_a.id, aws_subnet.jenkins_subnet_b.id]
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_AmazonEKSClusterPolicy,
+    aws_iam_role_policy_attachment.eks_cluster_AmazonEKSVPCResourceController,
+  ]
 }
 
-# Allow read access to Secrets Manager
-resource "aws_iam_role_policy_attachment" "jenkins_secrets_manager_policy" {
-  role       = aws_iam_role.jenkins_role.name
-  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
+# IAM role for worker nodes
+resource "aws_iam_role" "eks_nodes" {
+  name = "peex-eks-nodes-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = { Service = "ec2.amazonaws.com" },
+      Action = "sts:AssumeRole"
+    }]
+  })
 }
 
-output "jenkins_public_ip" {
-  value       = aws_instance.jenkins.public_ip
+resource "aws_iam_role_policy_attachment" "eks_nodes_AmazonEKSWorkerNodePolicy" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
 
-output "ansible_inventory_yaml" {
-  value = <<EOT
-all:
-  hosts:
-    ${aws_instance.jenkins.public_ip}:
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: ansible/jenkins-key.pem
-EOT
+resource "aws_iam_role_policy_attachment" "eks_nodes_AmazonEC2ContainerRegistryReadOnly" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy_attachment" "eks_nodes_AmazonEKS_CNI_Policy" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+# EKS managed node group
+resource "aws_eks_node_group" "default" {
+  cluster_name    = aws_eks_cluster.peex.name
+  node_group_name = "default"
+  node_role_arn   = aws_iam_role.eks_nodes.arn
+  subnet_ids      = [aws_subnet.jenkins_subnet_a.id, aws_subnet.jenkins_subnet_b.id]
+
+  scaling_config {
+    desired_size = 2
+    max_size     = 3
+    min_size     = 1
+  }
+
+  instance_types = ["t3.medium"]
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_nodes_AmazonEKSWorkerNodePolicy,
+    aws_iam_role_policy_attachment.eks_nodes_AmazonEC2ContainerRegistryReadOnly,
+    aws_iam_role_policy_attachment.eks_nodes_AmazonEKS_CNI_Policy,
+  ]
+}
+
+# Auth token for Kubernetes provider
+data "aws_eks_cluster_auth" "peex" {
+  name = aws_eks_cluster.peex.name
+}
+
+provider "kubernetes" {
+  host                   = aws_eks_cluster.peex.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.peex.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.peex.token
+}
+
+# Namespaces depend on EKS cluster
+resource "kubernetes_namespace" "staging" {
+  metadata { name = "staging" }
+  depends_on = [aws_eks_cluster.peex, aws_eks_node_group.default]
+}
+
+resource "kubernetes_namespace" "production" {
+  metadata { name = "production" }
+  depends_on = [aws_eks_cluster.peex, aws_eks_node_group.default]
 }
