@@ -70,6 +70,7 @@ jobs:
 
       - name: Generate version
         id: version
+        if: github.ref == 'refs/heads/main'
         run: |
           OUTPUT=$(npx semantic-release --dry-run || true)
           echo "$OUTPUT"
