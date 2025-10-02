@@ -110,7 +110,7 @@ jobs:
         run: |
           url=$(kubectl get svc peex-app -n staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "url=http://$url" >> $GITHUB_OUTPUT
-          
+
     outputs:
       staging_url: ${{ steps.get-url.outputs.url }}
 
@@ -148,7 +148,7 @@ jobs:
   notify:
     name: Send notification email
     runs-on: ubuntu-latest
-    needs: [terraform, ansible, jenkins]  
+    needs: [terraform, build-and-push, deploy-staging, test-staging, deploy-prod]  
     if: always()                      
     steps:
       - name: Send email notification
