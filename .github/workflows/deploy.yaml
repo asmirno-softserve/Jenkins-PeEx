@@ -171,7 +171,7 @@ jobs:
   tag-stable:
     name: Tag as stable
     runs-on: ubuntu-latest
-    needs: [test-staging]
+    needs: [test-staging, build-and-push]
     if: success()
     steps:
       - name: Configure AWS credentials
@@ -193,7 +193,7 @@ jobs:
   deploy-prod:
     name: Deploy to EKS (prod)
     runs-on: ubuntu-latest
-    needs: [test-staging]
+    needs: [test-staging, build-and-push]
     if: github.event.inputs.action == 'apply'
     steps:
       - name: Checkout repo
