@@ -84,20 +84,22 @@ jobs:
     if: github.event.inputs.action == 'apply'
     steps:
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-central-1
 
       - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076
 
       - name: Tag & Push Docker image
         run: |
           docker tag peex-app:${{ needs.build.outputs.version }} \
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
+            $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
   deploy-staging:
     name: Deploy to EKS (staging)
@@ -109,7 +111,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -128,14 +130,17 @@ jobs:
 
       - name: Deploy to staging
         run: |
-          kubectl set image deployment/peex-app peex-app=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n staging
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n staging
           kubectl rollout status deployment/peex-app -n staging
+          
       
       - name: Get staging LB URL
         id: get-url
         run: |
           url=$(kubectl get svc peex-app -n staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "url=http://$url" >> $GITHUB_OUTPUT
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
     outputs:
       staging_url: ${{ steps.get-url.outputs.url }}
@@ -159,7 +164,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -178,8 +183,10 @@ jobs:
 
       - name: Deploy to prod
         run: |
-          kubectl set image deployment/peex-app peex-app=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n production
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n production
           kubectl rollout status deployment/peex-app -n production
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
   notify:
     name: Send notification email
