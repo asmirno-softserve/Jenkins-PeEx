@@ -154,8 +154,19 @@ jobs:
     needs: [deploy-staging]
     if: github.event.inputs.action == 'apply'
     steps:
-      - name: Test staging app
-        run: curl -f ${{ needs.deploy-staging.outputs.staging_url }}/health
+      - name: Test staging app with retries
+        run: |
+          for i in 1 2 3; do
+            echo "Attempt $i..."
+            if curl -fsSL ${{ needs.deploy-staging.outputs.staging_url }}/health; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Health check failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 3 attempts"
+          exit 1
 
   tag-stable:
     name: Tag as stable
