@@ -110,8 +110,9 @@ jobs:
         run: |
           url=$(kubectl get svc peex-app -n staging -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "url=http://$url" >> $GITHUB_OUTPUT
-        outputs:
-          staging_url: ${{ steps.get-url.outputs.url }}
+          
+    outputs:
+      staging_url: ${{ steps.get-url.outputs.url }}
 
   test-staging:
     name: Run acceptance tests (staging)
