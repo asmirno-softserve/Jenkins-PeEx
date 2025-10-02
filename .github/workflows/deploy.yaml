@@ -55,6 +55,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js for semantic-release
         uses: actions/setup-node@v4
@@ -69,9 +71,10 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          npx semantic-release --dry-run
-          VERSION=$(npx semantic-release --dry-run | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          OUTPUT=$(npx semantic-release --dry-run || true)
+          echo "$OUTPUT"
+          VERSION=$(echo "$OUTPUT" | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT 
 
       - name: Build Docker image
         run: |
