@@ -1,6 +1,0 @@
-all:
-  hosts:
-    ec2:
-      ansible_host: 35.158.122.233
-      ansible_user: ubuntu
-      ansible_ssh_private_key_file: ~/Downloads/PeEx.pem
