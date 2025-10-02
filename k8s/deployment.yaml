@@ -12,8 +12,6 @@ spec:
       labels:
         app: peex-app
     spec:
-      serviceAccountName: peex-app-sa
-      automountServiceAccountToken: false
       containers:
       - name: peex-app
         image: 038462773293.dkr.ecr.eu-central-1.amazonaws.com/peex-app:1.0.0
