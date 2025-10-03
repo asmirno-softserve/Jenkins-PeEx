@@ -11,6 +11,12 @@ terraform {
   }
 }
 
+data "aws_secretsmanager_secret_version" "mail_password" {
+  secret_id = "peex-mail-password"
+}
+
+
+
 # Network
 resource "aws_vpc" "jenkins_vpc" {
   cidr_block = "10.0.0.0/16"
@@ -60,6 +66,8 @@ resource "aws_route_table_association" "jenkins_rta_b" {
   route_table_id = aws_route_table.jenkins_rt.id
 }
 
+
+
 # IAM role for EKS cluster
 resource "aws_iam_role" "eks_cluster" {
   name = "peex-eks-cluster-role"
@@ -84,6 +92,8 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSVPCResourceContr
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
+
+
 # EKS cluster
 resource "aws_eks_cluster" "peex" {
   name     = "peex-eks"
@@ -99,6 +109,8 @@ resource "aws_eks_cluster" "peex" {
     aws_iam_role_policy_attachment.eks_cluster_AmazonEKSVPCResourceController,
   ]
 }
+
+
 
 # IAM role for worker nodes
 resource "aws_iam_role" "eks_nodes" {
@@ -129,6 +141,8 @@ resource "aws_iam_role_policy_attachment" "eks_nodes_AmazonEKS_CNI_Policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
 
+
+
 # EKS managed node group
 resource "aws_eks_node_group" "default" {
   cluster_name    = aws_eks_cluster.peex.name
@@ -151,6 +165,8 @@ resource "aws_eks_node_group" "default" {
   ]
 }
 
+
+
 # Auth token for Kubernetes provider
 data "aws_eks_cluster_auth" "peex" {
   name = aws_eks_cluster.peex.name
@@ -162,7 +178,9 @@ provider "kubernetes" {
   token                  = data.aws_eks_cluster_auth.peex.token
 }
 
-# Namespaces depend on EKS cluster
+
+
+# Namespaces
 resource "kubernetes_namespace" "staging" {
   metadata { name = "staging" }
   depends_on = [aws_eks_cluster.peex, aws_eks_node_group.default]
@@ -171,4 +189,111 @@ resource "kubernetes_namespace" "staging" {
 resource "kubernetes_namespace" "production" {
   metadata { name = "production" }
   depends_on = [aws_eks_cluster.peex, aws_eks_node_group.default]
+}
+
+# Secrets management
+resource "kubernetes_secret" "mail_password_staging" {
+  metadata {
+    name      = "mail-secret"
+    namespace = "staging"
+  }
+
+  data = {
+    MAIL_PASSWORD = base64encode(
+      data.aws_secretsmanager_secret_version.mail_password.secret_string
+    )
+  }
+}
+
+resource "kubernetes_secret" "mail_password_production" {
+  metadata {
+    name      = "mail-secret"
+    namespace = "production"
+  }
+
+  data = {
+    MAIL_PASSWORD = base64encode(
+      data.aws_secretsmanager_secret_version.mail_password.secret_string
+    )
+  }
+}
+
+resource "kubernetes_service_account" "app_staging" {
+  metadata {
+    name      = "peex-app-sa"
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+}
+
+resource "kubernetes_service_account" "app_production" {
+  metadata {
+    name      = "peex-app-sa"
+    namespace = kubernetes_namespace.production.metadata[0].name
+  }
+}
+
+resource "kubernetes_role" "read_mail_secret_staging" {
+  metadata {
+    name      = "read-mail-secret"
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["secrets"]
+    resource_names = ["mail-secret"]
+    verbs      = ["get"]
+  }
+}
+
+resource "kubernetes_role_binding" "bind_mail_secret_staging" {
+  metadata {
+    name      = "bind-mail-secret"
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role.read_mail_secret_staging.metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.app_staging.metadata[0].name
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+}
+
+resource "kubernetes_role" "read_mail_secret_production" {
+  metadata {
+    name      = "read-mail-secret"
+    namespace = kubernetes_namespace.production.metadata[0].name
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["secrets"]
+    resource_names = ["mail-secret"]
+    verbs      = ["get"]
+  }
+}
+
+resource "kubernetes_role_binding" "bind_mail_secret_production" {
+  metadata {
+    name      = "bind-mail-secret"
+    namespace = kubernetes_namespace.production.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role.read_mail_secret_production.metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = kubernetes_service_account.app_production.metadata[0].name
+    namespace = kubernetes_namespace.production.metadata[0].name
+  }
 }

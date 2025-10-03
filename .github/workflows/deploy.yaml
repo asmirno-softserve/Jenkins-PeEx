@@ -242,6 +242,25 @@ jobs:
     needs: [terraform, build-and-push, deploy-staging, test-staging, deploy-prod]  
     if: always()
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region eu-central-1 \
+            --name peex-eks
+
+      - name: Get MAIL_PASSWORD from Kubernetes Secret
+        id: get-mail-password
+        run: |
+          MAIL_PASSWORD=$(kubectl get secret mail-secret -n staging -o jsonpath="{.data.MAIL_PASSWORD}" | base64 --decode)
+          echo "MAIL_PASSWORD=$MAIL_PASSWORD" >> $GITHUB_ENV
+
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
@@ -249,7 +268,7 @@ jobs:
           server_port: 465
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
+          password: ${{ env.MAIL_PASSWORD }}
           subject: "CI/CD Pipeline result for ${{ github.repository }}"
           to: ${{ secrets.MAIL_USERNAME }}
           from: ${{ secrets.MAIL_USERNAME }}
