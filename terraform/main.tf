@@ -110,6 +110,10 @@ resource "aws_eks_cluster" "peex" {
   ]
 }
 
+resource "aws_iam_role_policy_attachment" "eks_nodes_AmazonEKS_CNI_Policy" {
+  role       = aws_iam_role.eks_nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
 
 
 # IAM role for worker nodes
