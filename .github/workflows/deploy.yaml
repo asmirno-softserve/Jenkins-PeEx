@@ -261,33 +261,7 @@ jobs:
           MAIL_PASSWORD=$(kubectl get secret mail-secret -n staging -o jsonpath="{.data.MAIL_PASSWORD}" | base64 --decode)
           echo "MAIL_PASSWORD=$MAIL_PASSWORD" >> $GITHUB_ENV
 
-      - name: Send email notification
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ env.MAIL_PASSWORD }}
-          subject: "CI/CD Pipeline result for ${{ github.repository }}"
-          to: ${{ secrets.MAIL_USERNAME }}
-          from: ${{ secrets.MAIL_USERNAME }}
-          body: |
-            Hello,
-
-            The CI/CD pipeline has finished for:
-            - Repository: ${{ github.repository }}
-            - Branch: ${{ github.ref_name }}
-            - Commit: ${{ github.sha }}
-
-            Action: **${{ github.event.inputs.action }}**
-
-            Results:
-            - Terraform: ${{ needs.terraform.result }}
-            - Build & Push: ${{ needs.build-and-push.result }}
-            - Deploy Staging: ${{ needs.deploy-staging.result }}
-            - Test Staging: ${{ needs.test-staging.result }}
-            - Deploy Prod: ${{ needs.deploy-prod.result }}
+    kubectl config use-context
 
   app-build:
     name: Build project

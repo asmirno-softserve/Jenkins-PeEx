@@ -199,9 +199,7 @@ resource "kubernetes_secret" "mail_password_staging" {
   }
 
   data = {
-    MAIL_PASSWORD = base64encode(
-      data.aws_secretsmanager_secret_version.mail_password.secret_string
-    )
+    MAIL_PASSWORD = data.aws_secretsmanager_secret_version.mail_password.secret_string
   }
 
   depends_on = [kubernetes_namespace.staging]
@@ -214,9 +212,7 @@ resource "kubernetes_secret" "mail_password_production" {
   }
 
   data = {
-    MAIL_PASSWORD = base64encode(
-      data.aws_secretsmanager_secret_version.mail_password.secret_string
-    )
+    MAIL_PASSWORD = data.aws_secretsmanager_secret_version.mail_password.secret_string
   }
 
   depends_on = [kubernetes_namespace.production]
