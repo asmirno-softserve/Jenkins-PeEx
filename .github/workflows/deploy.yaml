@@ -163,7 +163,7 @@ jobs:
               exit 0
             fi
             echo "Health check failed, retrying in 10s..."
-            sleep 10
+            sleep 20
           done
           echo "Health check failed after 3 attempts"
           exit 1

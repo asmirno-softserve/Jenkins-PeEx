@@ -12,7 +12,7 @@ terraform {
 }
 
 data "aws_secretsmanager_secret_version" "mail_password" {
-  secret_id = "peex-mail-password"
+  secret_id = "peex-notify-password"
 }
 
 
