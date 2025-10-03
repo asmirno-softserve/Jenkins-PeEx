@@ -22,7 +22,7 @@ jobs:
   terraform:
     name: Provision infrastructure with Terraform
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -47,14 +47,18 @@ jobs:
             terraform -chdir=terraform destroy -auto-approve
           fi        
 
-  build:
+  build-and-push:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: terraform
     if: github.event.inputs.action == 'apply'
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js for semantic-release
         uses: actions/setup-node@v4
@@ -69,20 +73,18 @@ jobs:
       - name: Generate version
         id: version
         run: |
-          npx semantic-release --dry-run
-          VERSION=$(npx semantic-release --dry-run | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+')
+          OUTPUT=$(npx semantic-release --dry-run || true)
+          echo "$OUTPUT"
+          VERSION=$(echo "$OUTPUT" | grep -oP 'next release version is \K[0-9]+\.[0-9]+\.[0-9]+' || true)
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_SHA::7}"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Docker image
         run: |
           docker build -t peex-app:${{ steps.version.outputs.version }} ./java
 
-  push:
-    name: Push Docker Image to ECR
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event.inputs.action == 'apply'
-    steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
         with:
@@ -95,16 +97,16 @@ jobs:
 
       - name: Tag & Push Docker image
         run: |
-          docker tag peex-app:${{ needs.build.outputs.version }} \
-            $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build.outputs.version }}
+          docker tag peex-app:${{ steps.version.outputs.version }} \
+            $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ steps.version.outputs.version }}
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ steps.version.outputs.version }}
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
   deploy-staging:
     name: Deploy to EKS (staging)
     runs-on: ubuntu-latest
-    needs: [terraform, push]
+    needs: [terraform, build-and-push]
     if: github.event.inputs.action == 'apply'
     steps:
       - name: Checkout repo
@@ -130,9 +132,10 @@ jobs:
 
       - name: Deploy to staging
         run: |
-          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n staging
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} -n staging
           kubectl rollout status deployment/peex-app -n staging
-          
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}          
       
       - name: Get staging LB URL
         id: get-url
@@ -151,13 +154,49 @@ jobs:
     needs: [deploy-staging]
     if: github.event.inputs.action == 'apply'
     steps:
-      - name: Test staging app
-        run: curl -f ${{ needs.deploy-staging.outputs.staging_url }}/health
+      - name: Test staging app with retries
+        run: |
+          for i in 1 2 3; do
+            echo "Attempt $i..."
+            if curl -fsSL ${{ needs.deploy-staging.outputs.staging_url }}/health; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Health check failed, retrying in 10s..."
+            sleep 20
+          done
+          echo "Health check failed after 3 attempts"
+          exit 1
+
+  tag-stable:
+    name: Tag as stable
+    runs-on: ubuntu-latest
+    needs: [test-staging, build-and-push]
+    if: success()
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076          
+
+      - name: Tag stable image
+        run: |
+          docker pull $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }}
+          docker tag $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} \
+            $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:stable
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:stable
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
   deploy-prod:
     name: Deploy to EKS (prod)
     runs-on: ubuntu-latest
-    needs: [test-staging]
+    needs: [test-staging, build-and-push]
     if: github.event.inputs.action == 'apply'
     steps:
       - name: Checkout repo
@@ -183,7 +222,16 @@ jobs:
 
       - name: Deploy to prod
         run: |
-          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ github.sha }} -n production
+          kubectl set image deployment/peex-app peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:${{ needs.build-and-push.outputs.version }} -n production
+          kubectl rollout status deployment/peex-app -n production
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      
+      - name: Rollback to stable version
+        if: failure()
+        run: |
+          kubectl set image deployment/peex-app \
+            peex-app=$AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/peex-app:stable -n production
           kubectl rollout status deployment/peex-app -n production
         env:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
@@ -191,9 +239,28 @@ jobs:
   notify:
     name: Send notification email
     runs-on: ubuntu-latest
-    needs: [terraform, build, push, deploy-staging, test-staging, deploy-prod]  
+    needs: [terraform, build-and-push, deploy-staging, test-staging, deploy-prod]  
     if: always()
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@3d21ddcb5087c3d29b7e19fe293e3455fabe32af
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region eu-central-1 \
+            --name peex-eks
+
+      - name: Get MAIL_PASSWORD from Kubernetes Secret
+        id: get-mail-password
+        run: |
+          MAIL_PASSWORD=$(kubectl get secret mail-secret -n staging -o jsonpath="{.data.MAIL_PASSWORD}" | base64 --decode)
+          echo "MAIL_PASSWORD=$MAIL_PASSWORD" >> $GITHUB_ENV
+
       - name: Send email notification
         uses: dawidd6/action-send-mail@v3
         with:
@@ -201,7 +268,7 @@ jobs:
           server_port: 465
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
+          password: ${{ env.MAIL_PASSWORD }}
           subject: "CI/CD Pipeline result for ${{ github.repository }}"
           to: ${{ secrets.MAIL_USERNAME }}
           from: ${{ secrets.MAIL_USERNAME }}
