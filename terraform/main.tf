@@ -203,6 +203,8 @@ resource "kubernetes_secret" "mail_password_staging" {
       data.aws_secretsmanager_secret_version.mail_password.secret_string
     )
   }
+
+  depends_on = [kubernetes_namespace.staging]
 }
 
 resource "kubernetes_secret" "mail_password_production" {
@@ -216,6 +218,8 @@ resource "kubernetes_secret" "mail_password_production" {
       data.aws_secretsmanager_secret_version.mail_password.secret_string
     )
   }
+
+  depends_on = [kubernetes_namespace.production]
 }
 
 resource "kubernetes_service_account" "app_staging" {
